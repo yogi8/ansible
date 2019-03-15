@@ -1,0 +1,86 @@
+- hosts: yogi
+  tasks:
+      - name: copying mysql56-server-5.6.27_amd64.txz file
+        copy:
+          src: /home/sanctum/ansi/pfiles/mysql56-server-5.6.27_amd64.txz
+          dest: /root/mysql56-server-5.6.27_amd64.txz
+          owner: root
+          mode: 0644
+      - name: copying Captive_portal_ports.sh file
+        copy:
+          src: /home/sanctum/ansi/pfiles/Captive_portal_ports.sh
+          dest: /usr/local/etc/rc.d/Captive_portal_ports.sh
+          owner: root
+          mode: 0755
+      - name: copying mysql_service.sh file
+        copy:
+          src: /home/sanctum/ansi/pfiles/mysql_service.sh
+          dest: /usr/local/etc/rc.d/mysql_service.sh
+          owner: root
+          mode: 0755
+      - name: package installation
+        package:
+          name: ['vim-console','databases/mysql56-client','databases/php56-mysql','databases/php56-mysqli','vnstat']
+          state: present
+        register: hello1
+      - debug: msg="{{ hello1}}"
+      - name: adding mysql package and mysql_enable=yes
+        shell: |
+          yes | pkg add mysql56-server-5.6.27_amd64.txz
+          sysrc mysql_enable=yes
+        args:
+          chdir: /root
+
+      - name: commenting mysql_user line
+        replace:
+          path: /usr/local/etc/rc.d/mysql-server
+          regexp: '^mysql_user="mysql"'
+          replace: '#mysql_user="mysql"'
+      - name: commenting mysql_limits_args line
+        replace:
+          path: /usr/local/etc/rc.d/mysql-server
+          regexp: '^mysql_limits_args="-e -U'
+          replace: '#mysql_limits_args="-e -U'
+      - name: adding line mysql_limits_args="-e"
+        lineinfile:
+          path: /usr/local/etc/rc.d/mysql-server
+          line: mysql_limits_args="-e"
+          insertafter: '^#mysql_limits_args'
+      - name: mysql-server start
+        service:
+          name: mysql-server
+          state: started
+
+      - name:
+        file:
+          path: /var/lib/vnstat
+          state: directory
+          mode: 0755
+      - name: editing /usr/local/etc/rc.d/vnstat file
+        replace:
+          path: /usr/local/etc/rc.d/vnstat
+          regexp: '^: \${vnstat_enable:=NO}'
+          replace: ': ${vnstat_enable:=YES}'
+      - name: editing /usr/local/etc/rc.d/vnstat file
+        replace:
+          path: /usr/local/etc/rc.d/vnstat
+          regexp: '^: \${vnstat_user:=vnstat}'
+          replace: ': ${vnstat_user:=root}'
+      - name: commenting Interface line in /usr/local/etc/vnstat.conf
+        replace:
+          path: /usr/local/etc/vnstat.conf
+          regexp: '^Interface(.*)'
+          replace: 'Interface "re0"'
+      - name: updating vnstat on interfaces
+        shell: |
+          vnstat --create -i {{item}}
+        with_items:
+          - re0
+          - re1
+          - re2      
+        ignore_errors: True
+      - name: creating a database
+        shell: |
+          mysql --user=root --password='' -e "create database pfsense"
+          mysql --user=root --password='' -e "create database pfsense_wifi"
+        ignore_errors: True

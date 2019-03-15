@@ -1,0 +1,26 @@
+apt-get update
+apt-get -y upgrade
+apt-get install sshpass
+apt-get install -y python3-pip
+apt-get install build-essential libssl-dev libffi-dev python-dev
+apt-get install -y python3-venv
+mkdir ansi
+cd ansi
+python3 -m venv yogi
+source yogi/bin/activate
+pip install ansible
+export ANSIBLE_HOST_KEY_CHECKING=False
+
+
+
+
+apt-get install libmysqlclient-dev
+apt-get install libmariadbclient-dev
+echo "create database pfsense_wifi" | mysql -uroot -p
+mysql --user=root --password='' -e "show databases"
+
+Can't create database'yogi'; database exists"
+ansible host -m ping -i pf.txt
+#where  pf.txt has below line
+host ansible_host=10.10.1.94 ansible_ssh_user=root ansible_ssh_pass=pfsense ansible_python_interpreter=/usr/local/bin/python2.7
+
