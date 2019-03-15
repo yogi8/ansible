@@ -51,7 +51,7 @@
           name: mysql-server
           state: started
 
-      - name:
+      - name: creating folder /var/lib/vnstat
         file:
           path: /var/lib/vnstat
           state: directory
