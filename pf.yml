@@ -1,4 +1,10 @@
 - hosts: yogi
+
+  vars:
+    interfaces:
+      - em2  
+      - em3
+
   tasks:
       - name: copying mysql56-server-5.6.27_amd64.txz file
         copy:
@@ -51,7 +57,7 @@
           name: mysql-server
           state: started
 
-      - name: creating folder /var/lib/vnstat
+      - name:
         file:
           path: /var/lib/vnstat
           state: directory
@@ -70,17 +76,21 @@
         replace:
           path: /usr/local/etc/vnstat.conf
           regexp: '^Interface(.*)'
-          replace: 'Interface "re0"'
+          replace: 'Interface "{{hostvars[inventory_hostname].ansible_default_ipv4.device}}"'
+#replace: 'Interface "igb0"'
       - name: updating vnstat on interfaces
         shell: |
           vnstat --create -i {{item}}
         with_items:
-          - re0
-          - re1
-          - re2      
+          - '{{ interfaces }}'                
         ignore_errors: True
       - name: creating a database
         shell: |
           mysql --user=root --password='' -e "create database pfsense"
           mysql --user=root --password='' -e "create database pfsense_wifi"
+          mysql --user=root --password='' -e "SET GLOBAL max_connections = 500"
         ignore_errors: True
+
+
+
+

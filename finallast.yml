@@ -1,0 +1,263 @@
+- hosts: yogi
+  vars:
+    servers:
+      - em2
+      - em3
+
+  tasks:
+    - name: checking for the existence of ntopng package
+      stat:
+        path: /usr/local/bin/ntopng
+      register: hello
+    - debug: msg="{{hello}}"       #
+
+    - name: fails if there is no ntopng binary
+      fail:
+        msg: "please install ntopng from ui"
+      when: hello.stat.exists == false
+
+    - name: ntopng stop
+      service:
+        name: ntopng
+        state: stopped
+      
+
+    - name: adding softlinks for binaries to ntopng in /lib dir
+      shell: |
+        ln -s libz.so.6 libz.so.1
+        ln -s libpcap.so.8 libpcap.so.1
+      args:
+        chdir: /lib
+
+    - name: adding libmaxminddb,openssl,flock
+      shell: |
+        yes | pkg add http://pkg.freebsd.org/FreeBSD:10:amd64/quarterly/All/libmaxminddb-1.3.2.txz      
+        yes | pkg add http://pkg.freebsd.org/FreeBSD:10:amd64/quarterly/All/openssl-1.0.2p_1,1.txz
+        yes | pkg add http://pkg.freebsd.org/FreeBSD:10:amd64/release_3/All/flock-2.19.txz
+      args:
+        chdir: /root
+
+    - name: Copy multiple files in Ansible with different permissions
+      copy:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        mode: "{{ item.mode }}"
+        owner: "{{ item.owner }}"
+      with_items:
+        - { src: '/home/sanctum/ansi/pfiles/ntopngbuild/cpulimit',dest: '/usr/local/bin', mode: '0755', owner: 'root' }
+        - { src: '/home/sanctum/ansi/pfiles/ntopngbuild/monitor.sh',dest: '/root', mode: '0755', owner: 'root' }
+        
+
+
+    - name: new ntopng package is being placed
+      copy:
+        src: /home/sanctum/ansi/pfiles/ntopngbuild/ntopngpackage/ntopng
+        dest: /usr/local/bin        
+        owner: root
+        mode: 0755
+        backup: yes
+      register: hello1          
+    - debug: msg="{{hello1}}"   #
+
+    - name: backup original ntopng
+      shell: mv {{hello1.backup_file}} ntopng_org
+      args:
+        chdir: /usr/local/bin
+      when: '"backup_file" in hello1'
+      register: hello2         #
+    - debug: msg="{{hello2}}"  #
+
+    - name: new php-fpm.conf is being placed
+      copy:
+        src: /home/sanctum/ansi/pfiles/ntopngbuild/php-fpm.conf
+        dest: /usr/local/etc
+        owner: root
+        mode: 0644
+        backup: yes
+      register: hello5
+    - debug: msg="{{hello5}}" #
+
+    - name: backup original php-fpm.conf
+      shell: mv {{hello5.backup_file}} php-fpm.conf_org
+      args:
+        chdir: /usr/local/etc
+      when: '"backup_file" in hello5'
+      register: hello6         #
+    - debug: msg="{{hello6}}"  #
+
+
+    - name: copying /ntopng folder to /root path
+      copy:
+        src: /home/sanctum/ansi/pfiles/torootbuild/
+        dest: /root/build
+        owner: root
+        mode: 0755
+
+    - name: 8.checking for the existence of /usr/local/share/ntopng folder
+      stat:
+        path: /usr/local/share/ntopng
+      register: hello
+    - debug: msg="{{hello}}"  #
+
+    - name: comparing /usr/local/share/ntopng and /root/build/ntopng
+      shell: |
+        diff -r /usr/local/share/ntopng /root/build/ntopng 
+      no_log: True
+      ignore_errors: True
+      when: hello.stat.exists == True and hello.stat.isdir
+      register: hello1
+      # - debug: msg="{{hello1.rc}}"
+
+    - name: backup /usr/local/share/ntopng as ntopng_org if it's different
+      shell: |
+        mv /usr/local/share/ntopng /usr/local/share/ntopng_org
+      when: hello.stat.exists == True and hello.stat.isdir and hello1.stdout != ''
+      register: hello2         #
+    - debug: msg="{{hello2}}"  #
+
+    - name: place required directory if it doesn't exists or it is different
+      shell: |
+        mv /root/build/ntopng /usr/local/share/ntopng
+      when: hello.stat.exists == False or hello1.stdout != ''
+      register: hello3        #
+    - debug: msg="{{hello3}}" #
+
+
+      
+
+
+
+#    - name: 11.copying /usr/local/pkg/ntopng.inc to /root/build
+#      copy:
+#        src: /home/sanctum/ansi/pfiles/torootbuild/ntopng.inc
+#        dest: /root/build
+#        owner: root
+#        mode: 0644 
+#      register: saffron        #
+#    - debug: msg="{{saffron}}" #
+
+#    - name: copying /usr/local/pkg/ntopng.inc to /root/build
+#      copy:
+#        src: /home/sanctum/ansi/pfiles/torootbuild/ntopng.sh
+#        dest: /root/build
+#        owner: root
+#        mode: 0755
+#      register: saffron1        #
+#    - debug: msg="{{saffron1}}" #
+
+
+    - name: setting given ntopng interfaces in a format     
+      set_fact:
+        result_item: "{{\"-i\"}}{{' '}}'{{item}}'{{' '}}"
+      with_items:
+        - '{{ servers }}'
+      register: result_list           
+    - debug: msg="{{result_list}}"    #
+    - set_fact:
+        result: '{{ result_list.results | map(attribute="ansible_facts.result_item") | join() }}'
+
+    - debug:                          #
+        var: result                   #
+
+
+    - name: extracting ip for the given ntopng interfaces
+      set_fact:
+        result_item: '{{hostvars[inventory_hostname]["ansible_" + item].ipv4[0].address}}/{{hostvars[inventory_hostname]["ansible_" + item].ipv4[0].netmask }}'
+      with_items:
+        - '{{ servers }}'
+      ignore_errors: True
+      register: result_list1
+    - debug: msg="{{result_list1}}"   #
+    - set_fact:
+        result1: '{{ result_list1.results | map(attribute="ansible_facts.result_item") | ipaddr("network/prefix") | join(",") }}'
+      ignore_errors: True
+    - debug:                          #
+        var: result1                  #
+
+    - name: fails if interfaces is not found
+      fail:
+        msg: "please check the interfaces name"
+      when: '"failed" in result_list1'
+
+
+
+    - name: commenting ip address and ntopng interfaces line in ntopng.sh
+      replace:
+        path: /root/build/ntopng.sh
+        regexp: '/usr/local/bin/ntopng(.*)'
+        replace: "/usr/local/bin/ntopng -d /var/db/ntopng -G /var/run/ntopng.pid -s -e -w 0 -W 3000    {{result}}--dns-mode '0'  --local-networks '{{result1}}' &"
+      when: '"failed" not in result_list1' #
+      register: nani                  #
+    - debug: msg="{{nani}}"           #
+
+        
+    - name: commenting ip address for ntopng interfaces line in ntopng.inc
+      replace:
+        path: /root/build/ntopng.inc
+        regexp: '\$local_networks = "--local-networks(.*)\d{1,3}(.*)'
+        replace: "$local_networks = \"--local-networks '{{result1}}'\";"
+      when: '"failed" not in result_list1'    #
+      register: nani1                #
+    - debug: msg="{{nani1}}"         #
+        
+
+
+
+
+    - name: fetching the updated ntopng.inc in /root/build to local system
+      fetch:
+        src: /root/build/ntopng.inc
+        dest: /home/sanctum/ansi
+      register: saffron1
+    - debug: msg="{{saffron1}}"    #
+
+    - name: updating the /usr/local/pkg/ntopng.inc with the updated fetched file
+      copy:
+        src: "{{saffron1.dest}}"
+        dest: /usr/local/pkg
+        owner: root
+        mode: 0644
+        backup: yes
+      register: hello1
+    - debug: msg="{{hello1}}"   #
+
+    - name: backup original ntopng
+      shell: mv {{hello1.backup_file}} ntopng.inc_org
+      args:
+        chdir: /usr/local/pkg
+      when: '"backup_file" in hello1'
+      register: hello2         #
+    - debug: msg="{{hello2}}"  #
+
+
+    - name: fetching the updated ntopng.sh in /root/build to local system
+      fetch:
+        src: /root/build/ntopng.sh
+        dest: /home/sanctum/ansi
+      register: saffron2
+    - debug: msg="{{saffron2}}" #
+
+    - name: updating the /usr/local/pkg/ntopng.sh with the updated fetched file
+      copy:
+        src: "{{saffron2.dest}}"
+        dest: /usr/local/etc/rc.d
+        owner: root
+        mode: 0755
+        backup: yes
+      register: hello1
+    - debug: msg="{{hello1}}"  #
+
+    - name: backup original ntopng.sh
+      shell: mv {{hello1.backup_file}} ntopng.sh_org
+      args:
+        chdir: /usr/local/etc/rc.d
+      when: '"backup_file" in hello1'
+      register: hello2         #
+    - debug: msg="{{hello2}}"  #
+
+#    - name: ntopng started
+#      service:
+#        name: ntopng
+#        state: started
+
+
