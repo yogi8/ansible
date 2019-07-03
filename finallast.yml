@@ -28,6 +28,7 @@
         ln -s libpcap.so.8 libpcap.so.1
       args:
         chdir: /lib
+      ignore_errors: True
 
     - name: adding libmaxminddb,openssl,flock
       shell: |
